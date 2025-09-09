@@ -7,6 +7,12 @@ import Foundation
 
 @main
 struct TestApp: App {
+    init() {
+        // 应用启动时加载历史数据和优化配置
+        AnalysisDataCollector.shared.loadFromFile()
+        AnalysisDataCollector.shared.loadOptimizationConfig()
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -18,6 +24,7 @@ struct ContentView: View {
     @State private var showingCamera = false
     @State private var showingResults = false
     @State private var capturedImage: UIImage?
+    @State private var showingOptimization = false
     
     var body: some View {
         NavigationView {
@@ -42,20 +49,38 @@ struct ContentView: View {
                 Spacer()
                 
                 // 主要功能按钮
-                Button(action: {
-                    showingCamera = true
-                    print("拍摄环境照片按钮被点击")
-                }) {
-                    HStack {
-                        Image(systemName: "camera.fill")
-                        Text("拍摄环境照片")
+                VStack(spacing: 15) {
+                    Button(action: {
+                        showingCamera = true
+                        print("拍摄环境照片按钮被点击")
+                    }) {
+                        HStack {
+                            Image(systemName: "camera.fill")
+                            Text("拍摄环境照片")
+                        }
+                        .font(.title2)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .cornerRadius(15)
                     }
-                    .font(.title2)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .cornerRadius(15)
+                    
+                    // 优化管理按钮
+                    Button(action: {
+                        showingOptimization = true
+                    }) {
+                        HStack {
+                            Image(systemName: "chart.bar.fill")
+                            Text("AI优化管理")
+                        }
+                        .font(.title3)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color(red: 0.12, green: 0.25, blue: 0.67))
+                        .cornerRadius(15)
+                    }
                 }
                 .padding(.horizontal, 30)
                 
@@ -79,6 +104,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingResults) {
             ResultsView(originalImage: capturedImage)
+        }
+        .sheet(isPresented: $showingOptimization) {
+            OptimizationManagementView()
         }
     }
 }
@@ -253,14 +281,16 @@ struct ImageAnalysisResult {
     
     // 根据光线条件计算参数
     private mutating func calculateLightingBasedSettings() {
-        if brightnessValue < 0.3 {
+        let config = AnalysisDataCollector.shared.optimizationConfig
+        
+        if brightnessValue < config.lightThreshold {
             // 光线较暗
             recommendedISO = "800"
             if recommendedShutterSpeed == "1/250s" {
                 recommendedShutterSpeed = "1/60s"
             }
             lighting = "光线较暗，建议增加曝光"
-        } else if brightnessValue > 0.7 {
+        } else if brightnessValue > config.brightThreshold {
             // 光线过亮
             recommendedISO = "100"
             if recommendedShutterSpeed == "1/250s" {
@@ -1107,12 +1137,35 @@ struct ImagePicker: UIViewControllerRepresentable {
     }
 }
 
+// MARK: - 优化配置结构体
+struct OptimizationConfig: Codable {
+    // 光线分析阈值
+    var lightThreshold: Double = 0.3
+    var brightThreshold: Double = 0.7
+    
+    // 主体识别阈值
+    var subjectConfidenceThreshold: Double = 0.7
+    
+    // 个性化推荐权重
+    var portraitWeight: Double = 1.0
+    var landscapeWeight: Double = 1.0
+    var lowLightWeight: Double = 1.0
+    
+    // 参数调整幅度
+    var apertureAdjustment: Double = 0.5
+    var shutterAdjustment: Double = 0.3
+    var isoAdjustment: Double = 0.2
+}
+
 // MARK: - 分析数据收集和优化系统
 class AnalysisDataCollector: ObservableObject {
     static let shared = AnalysisDataCollector()
     
     private var analysisHistory: [AnalysisData] = []
     private let maxHistoryCount = 1000 // 最多保存1000条分析记录
+    
+    // 优化参数配置
+    @Published var optimizationConfig = OptimizationConfig()
     
     private init() {}
     
@@ -1167,18 +1220,57 @@ class AnalysisDataCollector: ObservableObject {
         // 根据历史数据调整参数阈值
         if stats.averageBrightness < 0.4 {
             // 用户经常拍摄较暗场景，调整光线阈值
-            print("优化建议: 用户偏好较暗场景，调整光线阈值")
+            optimizationConfig.lightThreshold = 0.2
+            optimizationConfig.lowLightWeight = 1.5
+            print("优化建议: 用户偏好较暗场景，调整光线阈值从0.3降至0.2")
         }
         
         if stats.averageConfidence < 0.7 {
             // 识别置信度较低，可能需要调整识别算法
-            print("优化建议: 识别置信度较低，考虑调整识别算法")
+            optimizationConfig.subjectConfidenceThreshold = 0.5
+            print("优化建议: 识别置信度较低，降低置信度阈值至0.5")
         }
         
         // 根据主体类型分布调整推荐参数
         if let portraitCount = stats.subjectDistribution["人像摄影"],
            portraitCount > stats.totalAnalyses / 2 {
+            optimizationConfig.portraitWeight = 1.5
             print("优化建议: 用户主要拍摄人像，优化人像参数推荐")
+        }
+        
+        if let landscapeCount = stats.subjectDistribution["风景摄影"],
+           landscapeCount > stats.totalAnalyses / 2 {
+            optimizationConfig.landscapeWeight = 1.5
+            print("优化建议: 用户主要拍摄风景，优化风景参数推荐")
+        }
+        
+        // 保存优化配置
+        saveOptimizationConfig()
+    }
+    
+    // 保存优化配置
+    private func saveOptimizationConfig() {
+        guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let fileURL = documentsPath.appendingPathComponent("optimization_config.json")
+        
+        do {
+            let data = try JSONEncoder().encode(optimizationConfig)
+            try data.write(to: fileURL)
+        } catch {
+            print("保存优化配置失败: \(error)")
+        }
+    }
+    
+    // 加载优化配置
+    func loadOptimizationConfig() {
+        guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let fileURL = documentsPath.appendingPathComponent("optimization_config.json")
+        
+        do {
+            let data = try Data(contentsOf: fileURL)
+            optimizationConfig = try JSONDecoder().decode(OptimizationConfig.self, from: data)
+        } catch {
+            print("加载优化配置失败: \(error)")
         }
     }
     
@@ -1206,6 +1298,13 @@ class AnalysisDataCollector: ObservableObject {
         } catch {
             print("加载分析数据失败: \(error)")
         }
+    }
+    
+    // 重置数据
+    func resetData() {
+        analysisHistory.removeAll()
+        saveToFile()
+        print("分析数据已重置")
     }
 }
 
@@ -1261,6 +1360,219 @@ struct AnalysisStats {
         self.lightingDistribution = lightingDistribution
         self.averageBrightness = averageBrightness
         self.averageConfidence = averageConfidence
+    }
+}
+
+// MARK: - 优化管理界面
+struct OptimizationManagementView: View {
+    @StateObject private var dataCollector = AnalysisDataCollector.shared
+    @State private var analysisStats = AnalysisStats()
+    @State private var optimizationSuggestions: [String] = []
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // 标题
+                    Text("AI分析优化管理")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .padding(.top)
+                    
+                    // 数据统计卡片
+                    VStack(alignment: .leading, spacing: 15) {
+                        Text("分析数据统计")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                        
+                        StatRow(title: "总分析次数", value: "\(analysisStats.totalAnalyses)")
+                        StatRow(title: "平均亮度", value: String(format: "%.2f", analysisStats.averageBrightness))
+                        StatRow(title: "平均置信度", value: String(format: "%.1f%%", analysisStats.averageConfidence * 100))
+                        
+                        if !analysisStats.subjectDistribution.isEmpty {
+                            Text("主体类型分布")
+                                .font(.headline)
+                                .padding(.top, 10)
+                            
+                            ForEach(Array(analysisStats.subjectDistribution.keys.sorted()), id: \.self) { subject in
+                                let count = analysisStats.subjectDistribution[subject] ?? 0
+                                let percentage = Double(count) / Double(analysisStats.totalAnalyses) * 100
+                                StatRow(title: subject, value: "\(count)次 (\(String(format: "%.1f", percentage))%)")
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color(red: 0.12, green: 0.25, blue: 0.67).opacity(0.1))
+                    .cornerRadius(15)
+                    
+                    // 优化建议卡片
+                    VStack(alignment: .leading, spacing: 15) {
+                        Text("优化建议")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                        
+                        if optimizationSuggestions.isEmpty {
+                            Text("暂无优化建议")
+                                .foregroundColor(.gray)
+                        } else {
+                            ForEach(optimizationSuggestions.indices, id: \.self) { index in
+                                HStack(alignment: .top) {
+                                    Image(systemName: "lightbulb.fill")
+                                        .foregroundColor(.yellow)
+                                        .padding(.top, 2)
+                                    
+                                    Text(optimizationSuggestions[index])
+                                        .font(.body)
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color(red: 0.97, green: 0.98, blue: 0.99))
+                    .cornerRadius(15)
+                    
+                    // 操作按钮
+                    VStack(spacing: 10) {
+                        Button(action: {
+                            refreshData()
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.clockwise")
+                                Text("刷新数据")
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .cornerRadius(10)
+                        }
+                        
+                        Button(action: {
+                            exportData()
+                        }) {
+                            HStack {
+                                Image(systemName: "square.and.arrow.up")
+                                Text("导出数据")
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green)
+                            .cornerRadius(10)
+                        }
+                        
+                        Button(action: {
+                            resetData()
+                        }) {
+                            HStack {
+                                Image(systemName: "trash")
+                                Text("重置数据")
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.red)
+                            .cornerRadius(10)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                .padding()
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("完成") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            refreshData()
+        }
+    }
+    
+    private func refreshData() {
+        analysisStats = dataCollector.getAnalysisStats()
+        generateOptimizationSuggestions()
+    }
+    
+    private func generateOptimizationSuggestions() {
+        optimizationSuggestions.removeAll()
+        
+        // 基于数据生成优化建议
+        if analysisStats.totalAnalyses > 0 {
+            if analysisStats.averageBrightness < 0.4 {
+                optimizationSuggestions.append("用户偏好较暗场景，建议调整光线阈值从0.3降至0.2")
+            }
+            
+            if analysisStats.averageConfidence < 0.7 {
+                optimizationSuggestions.append("识别置信度较低，建议优化主体识别算法")
+            }
+            
+            if let portraitCount = analysisStats.subjectDistribution["人像摄影"],
+               portraitCount > analysisStats.totalAnalyses / 2 {
+                optimizationSuggestions.append("用户主要拍摄人像，建议优化人像参数推荐")
+            }
+            
+            if let landscapeCount = analysisStats.subjectDistribution["风景摄影"],
+               landscapeCount > analysisStats.totalAnalyses / 2 {
+                optimizationSuggestions.append("用户主要拍摄风景，建议优化风景参数推荐")
+            }
+            
+            if analysisStats.totalAnalyses < 10 {
+                optimizationSuggestions.append("分析数据较少，建议多使用应用以收集更多数据")
+            }
+        } else {
+            optimizationSuggestions.append("暂无分析数据，请先使用拍照功能")
+        }
+    }
+    
+    private func exportData() {
+        // 导出数据到控制台
+        print("=== AI分析数据导出 ===")
+        print("总分析次数: \(analysisStats.totalAnalyses)")
+        print("平均亮度: \(analysisStats.averageBrightness)")
+        print("平均置信度: \(analysisStats.averageConfidence)")
+        print("主体分布: \(analysisStats.subjectDistribution)")
+        print("光线分布: \(analysisStats.lightingDistribution)")
+        print("========================")
+        
+        // 这里可以添加更多导出功能，如保存到文件
+    }
+    
+    private func resetData() {
+        // 重置数据
+        dataCollector.resetData()
+        refreshData()
+    }
+}
+
+// MARK: - 统计行组件
+struct StatRow: View {
+    let title: String
+    let value: String
+    
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.body)
+                .foregroundColor(Color(red: 0.37, green: 0.45, blue: 0.63))
+            
+            Spacer()
+            
+            Text(value)
+                .font(.body)
+                .fontWeight(.semibold)
+                .foregroundColor(Color(red: 0.12, green: 0.25, blue: 0.67))
+        }
+        .padding(.vertical, 2)
     }
 }
 
