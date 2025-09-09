@@ -29,10 +29,10 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A1234567890ABCDEF123455A /* SmartPhotoAssistant */ = {
+		A1234567890ABCDEF123455A = {
 			isa = PBXGroup;
 			children = (
-				A1234567890ABCDEF1234565 /* SmartPhotoAssistant */,
+				A1234567890ABCDEF1234565,
 				A1234567890ABCDEF1234564 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -45,14 +45,13 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		A1234567890ABCDEF1234565 /* SmartPhotoAssistant */ = {
+		A1234567890ABCDEF1234565 = {
 			isa = PBXGroup;
 			children = (
 				A1234567890ABCDEF1234569 /* Assets.xcassets */,
 				A1234567890ABCDEF1234566 /* TestApp.swift */,
 				A1234567890ABCDEF1234568 /* Info.plist */,
 			);
-			path = "";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -124,7 +123,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A1234567890ABCDEF1234567 /* SmartPhotoAssistantApp.swift in Sources */,
+				A1234567890ABCDEF1234567 /* TestApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,6 +257,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = 8N5U885C7U;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "智能摄影助手需要访问相机来拍摄环境照片，以便AI分析并推荐最佳拍摄参数。";
@@ -288,6 +288,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = 8N5U885C7U;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "智能摄影助手需要访问相机来拍摄环境照片，以便AI分析并推荐最佳拍摄参数。";
