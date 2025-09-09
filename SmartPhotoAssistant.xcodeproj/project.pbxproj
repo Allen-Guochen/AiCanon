@@ -8,12 +8,14 @@
 
 /* Begin PBXBuildFile section */
 		A1234567890ABCDEF1234567 /* TestApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF1234566 /* TestApp.swift */; };
+		A1234567890ABCDEF123456A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1234567890ABCDEF1234569 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A1234567890ABCDEF1234563 /* SmartPhotoAssistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SmartPhotoAssistant.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1234567890ABCDEF1234566 /* TestApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestApp.swift; sourceTree = "<group>"; };
 		A1234567890ABCDEF1234568 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1234567890ABCDEF1234569 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -46,6 +48,7 @@
 		A1234567890ABCDEF1234565 /* SmartPhotoAssistant */ = {
 			isa = PBXGroup;
 			children = (
+				A1234567890ABCDEF1234569 /* Assets.xcassets */,
 				A1234567890ABCDEF1234566 /* TestApp.swift */,
 				A1234567890ABCDEF1234568 /* Info.plist */,
 			);
@@ -110,6 +113,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1234567890ABCDEF123456A /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
