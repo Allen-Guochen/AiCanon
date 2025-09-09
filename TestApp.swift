@@ -80,7 +80,7 @@ struct ContentView: View {
 
 struct CameraView: View {
     let onImageCaptured: (UIImage) -> Void
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         VStack {
@@ -103,7 +103,7 @@ struct CameraView: View {
             .cornerRadius(10)
             
             Button("取消") {
-                presentationMode.wrappedValue.dismiss()
+                dismiss()
             }
             .padding()
         }
@@ -149,23 +149,26 @@ struct AnalysisLoadingView: View {
     @State private var progress: Double = 0.0
     @State private var analysisResult: AnalysisResult?
     @State private var showResults = false
-    @Environment(\.presentationMode) var presentationMode
+    @State private var isAnalyzing = true
+    @Environment(\.dismiss) private var dismiss
     
     private let analysisSteps: [AnalysisStep] = [.analyzingSubject, .analyzingLight, .analyzingColor, .analyzingComposition, .analyzingWeather]
     
     var body: some View {
-        VStack(spacing: 30) {
-            if showResults, let result = analysisResult {
-                AnalysisResultsView(
-                    originalImage: originalImage,
-                    analysisResult: result,
-                    onDismiss: {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                )
-            } else {
-                // 加载界面
-                VStack(spacing: 40) {
+        ZStack {
+            // 主内容区域
+            VStack(spacing: 30) {
+                if showResults, let result = analysisResult {
+                    AnalysisResultsView(
+                        originalImage: originalImage,
+                        analysisResult: result,
+                        onDismiss: {
+                            dismiss()
+                        }
+                    )
+                } else {
+                    // 加载界面
+                    VStack(spacing: 40) {
                     // 图片预览
                     if let image = originalImage {
                         Image(uiImage: image)
@@ -242,7 +245,51 @@ struct AnalysisLoadingView: View {
                                 .animation(.easeInOut(duration: 0.3), value: currentStep)
                         }
                     }
+                    
+                    // 底部取消按钮
+                    Button(action: {
+                        cancelAnalysis()
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "stop.circle.fill")
+                                .font(.system(size: 18, weight: .medium))
+                            Text("取消分析")
+                                .font(.system(size: 16, weight: .medium))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .background(Color.red.opacity(0.8))
+                        .cornerRadius(25)
+                        .shadow(color: .red.opacity(0.3), radius: 8, x: 0, y: 4)
+                    }
+                    .opacity(isAnalyzing ? 1.0 : 0.0)
+                    .scaleEffect(isAnalyzing ? 1.0 : 0.8)
+                    .animation(.easeInOut(duration: 0.3), value: isAnalyzing)
+                    .padding(.top, 20)
                 }
+            }
+            
+            // 右上角X图标
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        cancelAnalysis()
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.white)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                    }
+                    .opacity(isAnalyzing ? 1.0 : 0.0)
+                    .scaleEffect(isAnalyzing ? 1.0 : 0.8)
+                    .animation(.easeInOut(duration: 0.3), value: isAnalyzing)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                Spacer()
             }
         }
         .padding()
@@ -253,7 +300,16 @@ struct AnalysisLoadingView: View {
     
     private func startAnalysis() {
         // 开始真实AI分析
+        isAnalyzing = true
         performRealAIAnalysis()
+    }
+    
+    private func cancelAnalysis() {
+        // 取消分析
+        isAnalyzing = false
+        withAnimation(.easeInOut(duration: 0.3)) {
+            dismiss()
+        }
     }
     
     private func performRealAIAnalysis() {
@@ -293,6 +349,8 @@ struct AnalysisLoadingView: View {
         
         // 分析完成
         DispatchQueue.main.asyncAfter(deadline: .now() + cumulativeTime) {
+            guard isAnalyzing else { return } // 检查是否已取消
+            
             withAnimation(.easeInOut(duration: 0.5)) {
                 currentStep = .completed
                 progress = 1.0
@@ -300,12 +358,15 @@ struct AnalysisLoadingView: View {
             
             // 生成分析结果
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                guard isAnalyzing else { return } // 检查是否已取消
+                
                 let totalAnalysisTime = Date().timeIntervalSince(startTime)
                 print("AI分析完成，总耗时: \(String(format: "%.2f", totalAnalysisTime))秒")
                 print("复杂度倍数: \(String(format: "%.2f", complexityMultiplier))")
                 
                 analysisResult = generateMockAnalysisResult()
                 withAnimation(.easeInOut(duration: 0.5)) {
+                    isAnalyzing = false
                     showResults = true
                 }
             }
@@ -506,7 +567,7 @@ struct ParameterRow: View {
 // MARK: - 原来的ResultsView（现在重命名为AnalysisLoadingView）
 struct ResultsView: View {
     let originalImage: UIImage?
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         AnalysisLoadingView(originalImage: originalImage)
