@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSCameraUsageDescription</key>
+    <string>智能摄影助手需要访问相机来拍摄环境照片，以便AI分析并推荐最佳拍摄参数。</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>智能摄影助手需要访问相册来保存和分享拍摄的照片。</string>
+    <key>CFBundleDisplayName</key>
+    <string>智能摄影助手</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.smartphotoassistant.app</string>
+    <key>CFBundleName</key>
+    <string>SmartPhotoAssistant</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>armv7</string>
+    </array>
+    <key>UIStatusBarStyle</key>
+    <string>UIStatusBarStyleDefault</string>
+</dict>
+</plist>
