@@ -21,7 +21,7 @@ struct ContentView: View {
                 VStack(spacing: 10) {
                     Image(systemName: "camera.viewfinder")
                         .font(.system(size: 60))
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color(red: 0.12, green: 0.25, blue: 0.67)) // 深蓝色
                     
                     Text("智能摄影助手")
                         .font(.largeTitle)
@@ -29,7 +29,7 @@ struct ContentView: View {
                     
                     Text("AI分析环境，推荐最佳拍摄参数")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color(red: 0.37, green: 0.45, blue: 0.63)) // 深灰蓝色
                         .multilineTextAlignment(.center)
                 }
                 .padding(.top, 50)
@@ -59,7 +59,7 @@ struct ContentView: View {
                 // 底部说明
                 Text("拍摄一张环境照片，AI将为您分析并推荐最佳相机参数")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color(red: 0.37, green: 0.45, blue: 0.63)) // 深灰蓝色
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 30)
                     .padding(.bottom, 30)
@@ -98,7 +98,7 @@ struct CameraView: View {
                 onImageCaptured(image)
             }
             .padding()
-            .background(Color.blue)
+            .background(Color(red: 0.12, green: 0.25, blue: 0.67)) // 深蓝色
             .foregroundColor(.white)
             .cornerRadius(10)
             
@@ -161,7 +161,7 @@ struct AnalysisLoadingView: View {
                                     .trim(from: 0, to: progress)
                                     .stroke(
                                         LinearGradient(
-                                            colors: [.blue, .purple],
+                                            colors: [Color(red: 0.12, green: 0.25, blue: 0.67), Color(red: 0.23, green: 0.51, blue: 0.96)], // 深蓝到亮蓝
                                             startPoint: .topLeading,
                                             endPoint: .bottomTrailing
                                         ),
@@ -173,7 +173,7 @@ struct AnalysisLoadingView: View {
                                 
                                 Image(systemName: "brain.head.profile")
                                     .font(.system(size: 30))
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(Color(red: 0.12, green: 0.25, blue: 0.67)) // 深蓝色
                                     .scaleEffect(1.0 + sin(Date().timeIntervalSince1970 * 2) * 0.1)
                                     .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: currentStep)
                             }
@@ -188,7 +188,7 @@ struct AnalysisLoadingView: View {
                                 // 当前分析步骤文本
                                 Text(getCurrentStepText())
                                     .font(.headline)
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(Color(red: 0.12, green: 0.25, blue: 0.67)) // 深蓝色
                                     .scaleEffect(1.1)
                                     .animation(.easeInOut(duration: 0.5), value: currentStep)
                                     .transition(.asymmetric(
@@ -200,7 +200,7 @@ struct AnalysisLoadingView: View {
                                 Text("\(Int(progress * 100))%")
                                     .font(.title3)
                                     .fontWeight(.bold)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(Color(red: 0.37, green: 0.45, blue: 0.63)) // 深灰蓝色
                             }
                         }
                         
@@ -208,8 +208,8 @@ struct AnalysisLoadingView: View {
                         HStack(spacing: 25) {
                             ForEach(analysisSteps, id: \.self) { step in
                                 Circle()
-                                    .fill(step == currentStep ? Color.blue : 
-                                          (analysisSteps.firstIndex(of: step)! < analysisSteps.firstIndex(of: currentStep)! ? Color.green : Color.gray.opacity(0.3)))
+                                    .fill(step == currentStep ? Color(red: 0.12, green: 0.25, blue: 0.67) : 
+                                          (analysisSteps.firstIndex(of: step)! < analysisSteps.firstIndex(of: currentStep)! ? Color(red: 0.23, green: 0.51, blue: 0.96) : Color.gray.opacity(0.3)))
                                     .frame(width: 20, height: 20)
                                     .scaleEffect(step == currentStep ? 1.4 : 1.0)
                                     .animation(.easeInOut(duration: 0.3), value: currentStep)
@@ -385,7 +385,7 @@ struct AnalysisResultsView: View {
                         AnalysisInfoRow(title: "分析置信度", value: "87%", icon: "checkmark.circle")
                     }
                     .padding()
-                    .background(Color.blue.opacity(0.1))
+                    .background(Color(red: 0.12, green: 0.25, blue: 0.67).opacity(0.1)) // 深蓝色背景
                     .cornerRadius(15)
                     
                     // 推荐参数
@@ -407,15 +407,15 @@ struct AnalysisResultsView: View {
                         
                         Text("拍摄建议")
                             .font(.headline)
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color(red: 0.12, green: 0.25, blue: 0.67)) // 深蓝色
                         
                         Text("根据AI分析，这是一个风景场景，建议使用小光圈获得深景深，配合较快的快门速度确保画面清晰。")
                             .font(.body)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color(red: 0.37, green: 0.45, blue: 0.63)) // 深灰蓝色
                             .multilineTextAlignment(.leading)
                     }
                     .padding()
-                    .background(Color.gray.opacity(0.1))
+                    .background(Color(red: 0.97, green: 0.98, blue: 0.99)) // 浅灰蓝色背景
                     .cornerRadius(15)
                 }
                 
@@ -428,7 +428,7 @@ struct AnalysisResultsView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
+                        .background(Color(red: 0.12, green: 0.25, blue: 0.67)) // 深蓝色
                         .cornerRadius(15)
                 }
                 .padding(.horizontal)
@@ -447,18 +447,19 @@ struct AnalysisInfoRow: View {
     var body: some View {
         HStack {
             Image(systemName: icon)
-                .foregroundColor(.blue)
+                .foregroundColor(Color(red: 0.12, green: 0.25, blue: 0.67)) // 深蓝色
                 .frame(width: 20)
             
             Text(title)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color(red: 0.37, green: 0.45, blue: 0.63)) // 深灰蓝色
             
             Spacer()
             
             Text(value)
                 .font(.subheadline)
                 .fontWeight(.medium)
+                .foregroundColor(Color(red: 0.12, green: 0.25, blue: 0.67)) // 深蓝色
         }
     }
 }
@@ -472,14 +473,14 @@ struct ParameterRow: View {
         HStack {
             Text(parameter)
                 .font(.body)
-                .foregroundColor(.primary)
+                .foregroundColor(Color(red: 0.22, green: 0.27, blue: 0.33)) // 深灰色
             
             Spacer()
             
             Text(value)
                 .font(.body)
                 .fontWeight(.semibold)
-                .foregroundColor(.blue)
+                .foregroundColor(Color(red: 0.12, green: 0.25, blue: 0.67)) // 深蓝色
         }
         .padding(.vertical, 2)
     }
