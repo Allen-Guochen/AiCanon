@@ -1,4 +1,6 @@
 import SwiftUI
+import AVFoundation
+import Photos
 
 @main
 struct TestApp: App {
@@ -81,31 +83,105 @@ struct ContentView: View {
 struct CameraView: View {
     let onImageCaptured: (UIImage) -> Void
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var cameraManager = CameraManager()
     
     var body: some View {
-        VStack {
-            Text("相机界面")
-                .font(.title)
-                .padding()
+        ZStack {
+            // 相机预览
+            CameraPreviewView(session: cameraManager.session)
+                .ignoresSafeArea()
             
-            Text("这里将实现相机功能")
-                .foregroundColor(.secondary)
+            VStack {
+                // 顶部控制栏
+                HStack {
+                    Button("取消") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                    .padding()
+                    .background(Color.black.opacity(0.5))
+                    .cornerRadius(20)
+                    
+                    Spacer()
+                    
+                    // 切换摄像头按钮
+                    Button(action: {
+                        cameraManager.switchCamera()
+                    }) {
+                        Image(systemName: "camera.rotate")
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Color.black.opacity(0.5))
+                            .cornerRadius(20)
+                    }
+                }
                 .padding()
-            
-            Button("模拟拍摄") {
-                // 模拟拍摄
-                let image = UIImage(systemName: "photo") ?? UIImage()
-                onImageCaptured(image)
+                
+                Spacer()
+                
+                // 底部控制栏
+                HStack(spacing: 50) {
+                    // 相册按钮
+                    Button(action: {
+                        cameraManager.showImagePicker = true
+                    }) {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Color.black.opacity(0.5))
+                            .cornerRadius(20)
+                    }
+                    
+                    // 拍摄按钮
+                    Button(action: {
+                        cameraManager.capturePhoto { image in
+                            if let image = image {
+                                onImageCaptured(image)
+                            }
+                        }
+                    }) {
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 80, height: 80)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.black.opacity(0.3), lineWidth: 3)
+                                    .frame(width: 70, height: 70)
+                            )
+                    }
+                    
+                    // 占位按钮（保持对称）
+                    Color.clear
+                        .frame(width: 44, height: 44)
+                }
+                .padding(.bottom, 50)
             }
-            .padding()
-            .background(Color(red: 0.12, green: 0.25, blue: 0.67)) // 深蓝色
-            .foregroundColor(.white)
-            .cornerRadius(10)
-            
-            Button("取消") {
+        }
+        .onAppear {
+            cameraManager.startSession()
+        }
+        .onDisappear {
+            cameraManager.stopSession()
+        }
+        .sheet(isPresented: $cameraManager.showImagePicker) {
+            ImagePicker { image in
+                if let image = image {
+                    onImageCaptured(image)
+                }
+            }
+        }
+        .alert("相机权限", isPresented: $cameraManager.showPermissionAlert) {
+            Button("设置") {
+                if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(settingsUrl)
+                }
+            }
+            Button("取消", role: .cancel) {
                 dismiss()
             }
-            .padding()
+        } message: {
+            Text("请在设置中允许访问相机以使用拍照功能")
         }
     }
 }
@@ -492,6 +568,211 @@ struct ResultsView: View {
     
     var body: some View {
         AnalysisLoadingView(originalImage: originalImage)
+    }
+}
+
+// MARK: - 相机管理器
+class CameraManager: NSObject, ObservableObject {
+    let session = AVCaptureSession()
+    private var videoOutput = AVCapturePhotoOutput()
+    private var currentCamera: AVCaptureDevice?
+    private var frontCamera: AVCaptureDevice?
+    private var backCamera: AVCaptureDevice?
+    
+    @Published var showImagePicker = false
+    @Published var showPermissionAlert = false
+    
+    override init() {
+        super.init()
+        setupCameras()
+    }
+    
+    private func setupCameras() {
+        let discoverySession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera],
+            mediaType: .video,
+            position: .unspecified
+        )
+        
+        for device in discoverySession.devices {
+            if device.position == .back {
+                backCamera = device
+            } else if device.position == .front {
+                frontCamera = device
+            }
+        }
+        
+        currentCamera = backCamera
+    }
+    
+    func startSession() {
+        checkCameraPermission { [weak self] granted in
+            DispatchQueue.main.async {
+                if granted {
+                    self?.configureSession()
+                } else {
+                    self?.showPermissionAlert = true
+                }
+            }
+        }
+    }
+    
+    func stopSession() {
+        DispatchQueue.global(qos: .background).async {
+            self.session.stopRunning()
+        }
+    }
+    
+    private func checkCameraPermission(completion: @escaping (Bool) -> Void) {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            completion(true)
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                completion(granted)
+            }
+        case .denied, .restricted:
+            completion(false)
+        @unknown default:
+            completion(false)
+        }
+    }
+    
+    private func configureSession() {
+        session.beginConfiguration()
+        
+        // 添加视频输入
+        guard let camera = currentCamera,
+              let input = try? AVCaptureDeviceInput(device: camera) else {
+            session.commitConfiguration()
+            return
+        }
+        
+        if session.canAddInput(input) {
+            session.addInput(input)
+        }
+        
+        // 添加照片输出
+        if session.canAddOutput(videoOutput) {
+            session.addOutput(videoOutput)
+        }
+        
+        session.commitConfiguration()
+        
+        DispatchQueue.global(qos: .background).async {
+            self.session.startRunning()
+        }
+    }
+    
+    func switchCamera() {
+        guard let currentInput = session.inputs.first as? AVCaptureDeviceInput else { return }
+        
+        session.beginConfiguration()
+        session.removeInput(currentInput)
+        
+        if currentInput.device == backCamera {
+            currentCamera = frontCamera
+        } else {
+            currentCamera = backCamera
+        }
+        
+        guard let newCamera = currentCamera,
+              let newInput = try? AVCaptureDeviceInput(device: newCamera) else {
+            session.addInput(currentInput)
+            session.commitConfiguration()
+            return
+        }
+        
+        if session.canAddInput(newInput) {
+            session.addInput(newInput)
+        } else {
+            session.addInput(currentInput)
+        }
+        
+        session.commitConfiguration()
+    }
+    
+    func capturePhoto(completion: @escaping (UIImage?) -> Void) {
+        let settings = AVCapturePhotoSettings()
+        videoOutput.capturePhoto(with: settings, delegate: PhotoCaptureDelegate(completion: completion))
+    }
+}
+
+// MARK: - 照片捕获代理
+class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+    private let completion: (UIImage?) -> Void
+    
+    init(completion: @escaping (UIImage?) -> Void) {
+        self.completion = completion
+    }
+    
+    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        guard let imageData = photo.fileDataRepresentation(),
+              let image = UIImage(data: imageData) else {
+            completion(nil)
+            return
+        }
+        completion(image)
+    }
+}
+
+// MARK: - 相机预览视图
+struct CameraPreviewView: UIViewRepresentable {
+    let session: AVCaptureSession
+    
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: UIScreen.main.bounds)
+        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
+        previewLayer.frame = view.frame
+        previewLayer.videoGravity = .resizeAspectFill
+        view.layer.addSublayer(previewLayer)
+        return view
+    }
+    
+    func updateUIView(_ uiView: UIView, context: Context) {
+        // 更新预览层大小
+        if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
+            previewLayer.frame = uiView.frame
+        }
+    }
+}
+
+// MARK: - 图片选择器
+struct ImagePicker: UIViewControllerRepresentable {
+    let completion: (UIImage?) -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = .photoLibrary
+        picker.allowsEditing = true
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: ImagePicker
+        
+        init(_ parent: ImagePicker) {
+            self.parent = parent
+        }
+        
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            let image = info[.editedImage] as? UIImage ?? info[.originalImage] as? UIImage
+            parent.completion(image)
+            parent.dismiss()
+        }
+        
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.completion(nil)
+            parent.dismiss()
+        }
     }
 }
 
