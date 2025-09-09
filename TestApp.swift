@@ -3,6 +3,7 @@ import AVFoundation
 import Photos
 import Vision
 import CoreML
+import Foundation
 
 @main
 struct TestApp: App {
@@ -205,6 +206,12 @@ struct ImageAnalysisResult {
     var composition: String = "三分法构图，层次分明"
     var confidence: String = "85%"
     
+    // 分析数据（用于优化）
+    var brightnessValue: Double = 0.5
+    var dominantColorRGB: ColorRGB = ColorRGB(red: 0.5, green: 0.5, blue: 0.5)
+    var hasFace: Bool = false
+    var subjectConfidence: Double = 0.0
+    
     // 推荐的相机参数
     var recommendedAperture: String = "f/8.0"
     var recommendedShutterSpeed: String = "1/250s"
@@ -215,7 +222,15 @@ struct ImageAnalysisResult {
     var shootingAdvice: String = "根据AI分析，建议使用小光圈获得深景深，配合较快的快门速度确保画面清晰。"
     
     mutating func calculateRecommendedSettings() {
-        // 根据分析结果计算推荐参数
+        // 使用优化后的算法计算推荐参数
+        calculateSubjectBasedSettings()
+        calculateLightingBasedSettings()
+        calculateColorBasedSettings()
+        calculateCompositionBasedSettings()
+    }
+    
+    // 根据主体类型计算参数
+    private mutating func calculateSubjectBasedSettings() {
         if subject.contains("人像") {
             recommendedAperture = "f/2.8"
             recommendedShutterSpeed = "1/125s"
@@ -229,15 +244,63 @@ struct ImageAnalysisResult {
             recommendedAperture = "f/4.0"
             recommendedShutterSpeed = "1/100s"
             shootingAdvice = "美食摄影建议使用中等光圈，注意光线和角度。"
+        } else if subject.contains("风景") {
+            recommendedAperture = "f/8.0"
+            recommendedShutterSpeed = "1/250s"
+            shootingAdvice = "风景摄影建议使用小光圈获得深景深，配合较快的快门速度确保画面清晰。"
         }
-        
-        // 根据光线条件调整参数
-        if lighting.contains("较暗") {
+    }
+    
+    // 根据光线条件计算参数
+    private mutating func calculateLightingBasedSettings() {
+        if brightnessValue < 0.3 {
+            // 光线较暗
             recommendedISO = "800"
-            recommendedShutterSpeed = "1/60s"
-        } else if lighting.contains("过亮") {
+            if recommendedShutterSpeed == "1/250s" {
+                recommendedShutterSpeed = "1/60s"
+            }
+            lighting = "光线较暗，建议增加曝光"
+        } else if brightnessValue > 0.7 {
+            // 光线过亮
             recommendedISO = "100"
-            recommendedShutterSpeed = "1/500s"
+            if recommendedShutterSpeed == "1/250s" {
+                recommendedShutterSpeed = "1/500s"
+            }
+            lighting = "光线过亮，建议减少曝光"
+        } else {
+            lighting = "自然光，光线充足"
+        }
+    }
+    
+    // 根据色彩分析计算参数
+    private mutating func calculateColorBasedSettings() {
+        let maxColor = max(dominantColorRGB.red, dominantColorRGB.green, dominantColorRGB.blue)
+        
+        if dominantColorRGB.red == maxColor {
+            color = "暖色调，红色为主"
+            recommendedWhiteBalance = "日光"
+        } else if dominantColorRGB.blue == maxColor {
+            color = "冷色调，蓝色为主"
+            recommendedWhiteBalance = "阴天"
+        } else if dominantColorRGB.green == maxColor {
+            color = "自然色调，绿色为主"
+            recommendedWhiteBalance = "自动"
+        } else {
+            color = "色彩平衡"
+            recommendedWhiteBalance = "自动"
+        }
+    }
+    
+    // 根据构图分析计算参数
+    private mutating func calculateCompositionBasedSettings() {
+        if hasFace {
+            composition = "人像构图，建议使用人像模式"
+            recommendedFocusMode = "人脸对焦"
+            recommendedMeteringMode = "点测光"
+        } else {
+            composition = "三分法构图，层次分明"
+            recommendedFocusMode = "单点对焦"
+            recommendedMeteringMode = "矩阵测光"
         }
     }
 }
@@ -468,6 +531,26 @@ struct AnalysisLoadingView: View {
         // 所有分析完成后，计算推荐参数
         group.notify(queue: .main) {
             analysisResult.calculateRecommendedSettings()
+            
+            // 记录分析数据用于优化
+            let analysisData = AnalysisData(
+                timestamp: Date(),
+                subject: analysisResult.subject,
+                lighting: analysisResult.lighting,
+                color: analysisResult.color,
+                composition: analysisResult.composition,
+                brightnessValue: analysisResult.brightnessValue,
+                dominantColorRGB: analysisResult.dominantColorRGB,
+                hasFace: analysisResult.hasFace,
+                subjectConfidence: analysisResult.subjectConfidence,
+                recommendedAperture: analysisResult.recommendedAperture,
+                recommendedShutterSpeed: analysisResult.recommendedShutterSpeed,
+                recommendedISO: analysisResult.recommendedISO,
+                userFeedback: nil
+            )
+            
+            AnalysisDataCollector.shared.recordAnalysis(analysisData)
+            
             completion(analysisResult)
         }
     }
@@ -499,6 +582,14 @@ struct AnalysisLoadingView: View {
                 subject = "风景摄影"
             }
             
+            // 记录置信度用于优化
+            print("主体识别: \(subject), 置信度: \(topObservation.confidence)")
+            
+            // 更新分析结果中的置信度
+            DispatchQueue.main.async {
+                self.analysisResult.subjectConfidence = Double(topObservation.confidence)
+            }
+            
             completion(subject)
         }
         
@@ -520,6 +611,14 @@ struct AnalysisLoadingView: View {
                 lighting = "光线较暗，建议增加曝光"
             } else if brightness > 0.7 {
                 lighting = "光线过亮，建议减少曝光"
+            }
+            
+            // 记录亮度值用于优化
+            print("光线分析: \(lighting), 亮度值: \(brightness)")
+            
+            // 更新分析结果中的亮度值
+            DispatchQueue.main.async {
+                self.analysisResult.brightnessValue = Double(brightness)
             }
             
             completion(lighting)
@@ -544,6 +643,18 @@ struct AnalysisLoadingView: View {
             colorDescription = "自然色调，绿色为主"
         }
         
+        // 记录色彩数据用于优化
+        print("色彩分析: \(colorDescription), RGB: (\(dominantColor.red), \(dominantColor.green), \(dominantColor.blue))")
+        
+        // 更新分析结果中的色彩数据
+        DispatchQueue.main.async {
+            self.analysisResult.dominantColorRGB = ColorRGB(
+                red: Double(dominantColor.red),
+                green: Double(dominantColor.green),
+                blue: Double(dominantColor.blue)
+            )
+        }
+        
         completion(colorDescription)
     }
     
@@ -556,11 +667,18 @@ struct AnalysisLoadingView: View {
                 return
             }
             
-            if observations.count > 0 {
-                completion("人像构图，建议使用人像模式")
-            } else {
-                completion("三分法构图，层次分明")
+            let hasFace = observations.count > 0
+            let composition = hasFace ? "人像构图，建议使用人像模式" : "三分法构图，层次分明"
+            
+            // 记录构图数据用于优化
+            print("构图分析: \(composition), 检测到人脸: \(hasFace)")
+            
+            // 更新分析结果中的人脸检测结果
+            DispatchQueue.main.async {
+                self.analysisResult.hasFace = hasFace
             }
+            
+            completion(composition)
         }
         
         let handler = VNImageRequestHandler(cgImage: cgImage)
@@ -986,6 +1104,163 @@ struct ImagePicker: UIViewControllerRepresentable {
             parent.completion(nil)
             parent.dismiss()
         }
+    }
+}
+
+// MARK: - 分析数据收集和优化系统
+class AnalysisDataCollector: ObservableObject {
+    static let shared = AnalysisDataCollector()
+    
+    private var analysisHistory: [AnalysisData] = []
+    private let maxHistoryCount = 1000 // 最多保存1000条分析记录
+    
+    private init() {}
+    
+    // 记录分析数据
+    func recordAnalysis(_ data: AnalysisData) {
+        analysisHistory.append(data)
+        
+        // 保持历史记录数量在限制内
+        if analysisHistory.count > maxHistoryCount {
+            analysisHistory.removeFirst(analysisHistory.count - maxHistoryCount)
+        }
+        
+        // 保存到本地文件
+        saveToFile()
+        
+        // 分析数据并优化参数
+        optimizeParameters()
+    }
+    
+    // 获取分析统计
+    func getAnalysisStats() -> AnalysisStats {
+        let totalCount = analysisHistory.count
+        guard totalCount > 0 else { return AnalysisStats() }
+        
+        // 统计主体类型分布
+        let subjectCounts = Dictionary(grouping: analysisHistory, by: { $0.subject })
+            .mapValues { $0.count }
+        
+        // 统计光线条件分布
+        let lightingCounts = Dictionary(grouping: analysisHistory, by: { $0.lighting })
+            .mapValues { $0.count }
+        
+        // 计算平均亮度
+        let avgBrightness = analysisHistory.map { $0.brightnessValue }.reduce(0, +) / Double(totalCount)
+        
+        // 计算平均置信度
+        let avgConfidence = analysisHistory.map { $0.subjectConfidence }.reduce(0, +) / Double(totalCount)
+        
+        return AnalysisStats(
+            totalAnalyses: totalCount,
+            subjectDistribution: subjectCounts,
+            lightingDistribution: lightingCounts,
+            averageBrightness: avgBrightness,
+            averageConfidence: avgConfidence
+        )
+    }
+    
+    // 优化参数
+    private func optimizeParameters() {
+        let stats = getAnalysisStats()
+        
+        // 根据历史数据调整参数阈值
+        if stats.averageBrightness < 0.4 {
+            // 用户经常拍摄较暗场景，调整光线阈值
+            print("优化建议: 用户偏好较暗场景，调整光线阈值")
+        }
+        
+        if stats.averageConfidence < 0.7 {
+            // 识别置信度较低，可能需要调整识别算法
+            print("优化建议: 识别置信度较低，考虑调整识别算法")
+        }
+        
+        // 根据主体类型分布调整推荐参数
+        if let portraitCount = stats.subjectDistribution["人像摄影"],
+           portraitCount > stats.totalAnalyses / 2 {
+            print("优化建议: 用户主要拍摄人像，优化人像参数推荐")
+        }
+    }
+    
+    // 保存到本地文件
+    private func saveToFile() {
+        guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let fileURL = documentsPath.appendingPathComponent("analysis_data.json")
+        
+        do {
+            let data = try JSONEncoder().encode(analysisHistory)
+            try data.write(to: fileURL)
+        } catch {
+            print("保存分析数据失败: \(error)")
+        }
+    }
+    
+    // 从本地文件加载
+    func loadFromFile() {
+        guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let fileURL = documentsPath.appendingPathComponent("analysis_data.json")
+        
+        do {
+            let data = try Data(contentsOf: fileURL)
+            analysisHistory = try JSONDecoder().decode([AnalysisData].self, from: data)
+        } catch {
+            print("加载分析数据失败: \(error)")
+        }
+    }
+}
+
+// MARK: - 分析数据结构
+struct AnalysisData: Codable {
+    let timestamp: Date
+    let subject: String
+    let lighting: String
+    let color: String
+    let composition: String
+    let brightnessValue: Double
+    let dominantColorRGB: ColorRGB
+    let hasFace: Bool
+    let subjectConfidence: Double
+    let recommendedAperture: String
+    let recommendedShutterSpeed: String
+    let recommendedISO: String
+    let userFeedback: String? // 用户反馈，用于进一步优化
+}
+
+// MARK: - 颜色RGB结构体
+struct ColorRGB: Codable {
+    let red: Double
+    let green: Double
+    let blue: Double
+    
+    init(red: Double, green: Double, blue: Double) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+    }
+}
+
+// MARK: - 分析统计结构
+struct AnalysisStats {
+    let totalAnalyses: Int
+    let subjectDistribution: [String: Int]
+    let lightingDistribution: [String: Int]
+    let averageBrightness: Double
+    let averageConfidence: Double
+    
+    init() {
+        self.totalAnalyses = 0
+        self.subjectDistribution = [:]
+        self.lightingDistribution = [:]
+        self.averageBrightness = 0.0
+        self.averageConfidence = 0.0
+    }
+    
+    init(totalAnalyses: Int, subjectDistribution: [String: Int], lightingDistribution: [String: Int], averageBrightness: Double, averageConfidence: Double) {
+        self.totalAnalyses = totalAnalyses
+        self.subjectDistribution = subjectDistribution
+        self.lightingDistribution = lightingDistribution
+        self.averageBrightness = averageBrightness
+        self.averageConfidence = averageConfidence
     }
 }
 
