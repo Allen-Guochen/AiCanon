@@ -1,6 +1,8 @@
 import SwiftUI
 import AVFoundation
 import Photos
+import Vision
+import CoreML
 
 @main
 struct TestApp: App {
@@ -195,6 +197,51 @@ enum AnalysisStep: String, CaseIterable {
     case completed = "分析完成"
 }
 
+// MARK: - AI分析结果数据结构
+struct ImageAnalysisResult {
+    var subject: String = "风景摄影"
+    var lighting: String = "自然光，光线充足"
+    var color: String = "色彩平衡"
+    var composition: String = "三分法构图，层次分明"
+    var confidence: String = "85%"
+    
+    // 推荐的相机参数
+    var recommendedAperture: String = "f/8.0"
+    var recommendedShutterSpeed: String = "1/250s"
+    var recommendedISO: String = "200"
+    var recommendedFocusMode: String = "单点对焦"
+    var recommendedMeteringMode: String = "矩阵测光"
+    var recommendedWhiteBalance: String = "自动"
+    var shootingAdvice: String = "根据AI分析，建议使用小光圈获得深景深，配合较快的快门速度确保画面清晰。"
+    
+    mutating func calculateRecommendedSettings() {
+        // 根据分析结果计算推荐参数
+        if subject.contains("人像") {
+            recommendedAperture = "f/2.8"
+            recommendedShutterSpeed = "1/125s"
+            recommendedFocusMode = "人脸对焦"
+            shootingAdvice = "人像摄影建议使用大光圈虚化背景，突出主体。"
+        } else if subject.contains("建筑") {
+            recommendedAperture = "f/11"
+            recommendedShutterSpeed = "1/60s"
+            shootingAdvice = "建筑摄影建议使用小光圈确保建筑细节清晰。"
+        } else if subject.contains("美食") {
+            recommendedAperture = "f/4.0"
+            recommendedShutterSpeed = "1/100s"
+            shootingAdvice = "美食摄影建议使用中等光圈，注意光线和角度。"
+        }
+        
+        // 根据光线条件调整参数
+        if lighting.contains("较暗") {
+            recommendedISO = "800"
+            recommendedShutterSpeed = "1/60s"
+        } else if lighting.contains("过亮") {
+            recommendedISO = "100"
+            recommendedShutterSpeed = "1/500s"
+        }
+    }
+}
+
 // MARK: - AI分析加载界面
 struct AnalysisLoadingView: View {
     let originalImage: UIImage?
@@ -202,6 +249,7 @@ struct AnalysisLoadingView: View {
     @State private var progress: Double = 0.0
     @State private var showResults = false
     @State private var isAnalyzing = true
+    @State private var analysisResult = ImageAnalysisResult()
     @Environment(\.dismiss) private var dismiss
     
     private let analysisSteps: [AnalysisStep] = [.analyzingSubject, .analyzingLight, .analyzingColor, .analyzingComposition]
@@ -211,7 +259,7 @@ struct AnalysisLoadingView: View {
             // 主内容区域
             VStack(spacing: 30) {
                 if showResults {
-                    AnalysisResultsView(originalImage: originalImage)
+                    AnalysisResultsView(originalImage: originalImage, analysisResult: analysisResult)
                 } else {
                     // 加载界面
                     VStack(spacing: 40) {
@@ -360,50 +408,214 @@ struct AnalysisLoadingView: View {
     }
     
     private func performAIAnalysis() {
-        // 模拟AI分析过程
-        let stepDurations: [AnalysisStep: TimeInterval] = [
-            .analyzingSubject: 1.5,    // 分析主体：1.5秒
-            .analyzingLight: 1.2,      // 分析光线：1.2秒
-            .analyzingColor: 1.0,      // 分析色彩：1.0秒
-            .analyzingComposition: 1.3  // 分析空间：1.3秒
-        ]
+        guard let image = originalImage else { return }
         
-        var cumulativeTime: TimeInterval = 0
-        
-        for (index, step) in analysisSteps.enumerated() {
-            let duration = stepDurations[step] ?? 1.0
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + cumulativeTime) {
-                guard isAnalyzing else { return } // 检查是否已取消
+        // 开始AI分析
+        analyzeImageWithVision(image) { analysisResult in
+            DispatchQueue.main.async {
+                guard isAnalyzing else { return }
                 
-                withAnimation(.easeInOut(duration: 0.5)) {
-                    currentStep = step
-                    progress = Double(index + 1) / Double(analysisSteps.count)
-                }
-            }
-            
-            cumulativeTime += duration
-        }
-        
-        // 分析完成
-        DispatchQueue.main.asyncAfter(deadline: .now() + cumulativeTime) {
-            guard isAnalyzing else { return } // 检查是否已取消
-            
-            withAnimation(.easeInOut(duration: 0.5)) {
-                currentStep = .completed
-                progress = 1.0
-            }
-            
-            // 显示结果
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                guard isAnalyzing else { return } // 检查是否已取消
+                // 更新分析结果
+                self.analysisResult = analysisResult
                 
+                // 显示结果
                 withAnimation(.easeInOut(duration: 0.5)) {
-                    isAnalyzing = false
-                    showResults = true
+                    self.isAnalyzing = false
+                    self.showResults = true
                 }
             }
         }
+    }
+    
+    // 真实的AI图像分析功能
+    private func analyzeImageWithVision(_ image: UIImage, completion: @escaping (ImageAnalysisResult) -> Void) {
+        guard let cgImage = image.cgImage else {
+            completion(ImageAnalysisResult())
+            return
+        }
+        
+        var analysisResult = ImageAnalysisResult()
+        let group = DispatchGroup()
+        
+        // 1. 分析主体 (物体识别)
+        group.enter()
+        analyzeSubject(cgImage: cgImage) { subject in
+            analysisResult.subject = subject
+            group.leave()
+        }
+        
+        // 2. 分析光线 (亮度分析)
+        group.enter()
+        analyzeLighting(cgImage: cgImage) { lighting in
+            analysisResult.lighting = lighting
+            group.leave()
+        }
+        
+        // 3. 分析色彩 (颜色分析)
+        group.enter()
+        analyzeColor(cgImage: cgImage) { color in
+            analysisResult.color = color
+            group.leave()
+        }
+        
+        // 4. 分析构图 (人脸检测、物体位置)
+        group.enter()
+        analyzeComposition(cgImage: cgImage) { composition in
+            analysisResult.composition = composition
+            group.leave()
+        }
+        
+        // 所有分析完成后，计算推荐参数
+        group.notify(queue: .main) {
+            analysisResult.calculateRecommendedSettings()
+            completion(analysisResult)
+        }
+    }
+    
+    // 分析拍摄主体
+    private func analyzeSubject(cgImage: CGImage, completion: @escaping (String) -> Void) {
+        let request = VNClassifyImageRequest { request, error in
+            guard let observations = request.results as? [VNClassificationObservation],
+                  let topObservation = observations.first else {
+                completion("未知主体")
+                return
+            }
+            
+            // 根据识别结果判断拍摄主体类型
+            let identifier = topObservation.identifier.lowercased()
+            var subject = "风景摄影"
+            
+            if identifier.contains("person") || identifier.contains("people") {
+                subject = "人像摄影"
+            } else if identifier.contains("building") || identifier.contains("architecture") {
+                subject = "建筑摄影"
+            } else if identifier.contains("food") || identifier.contains("meal") {
+                subject = "美食摄影"
+            } else if identifier.contains("car") || identifier.contains("vehicle") {
+                subject = "汽车摄影"
+            } else if identifier.contains("animal") || identifier.contains("pet") {
+                subject = "动物摄影"
+            } else if identifier.contains("landscape") || identifier.contains("nature") {
+                subject = "风景摄影"
+            }
+            
+            completion(subject)
+        }
+        
+        let handler = VNImageRequestHandler(cgImage: cgImage)
+        try? handler.perform([request])
+    }
+    
+    // 分析光线条件
+    private func analyzeLighting(cgImage: CGImage, completion: @escaping (String) -> Void) {
+        // 使用Vision框架分析图像亮度
+        let request = VNGenerateAttentionBasedSaliencyImageRequest { request, error in
+            // 这里可以分析图像的亮度分布
+            // 简化实现：根据图像整体亮度判断
+            let image = UIImage(cgImage: cgImage)
+            let brightness = self.calculateBrightness(image: image)
+            
+            var lighting = "自然光，光线充足"
+            if brightness < 0.3 {
+                lighting = "光线较暗，建议增加曝光"
+            } else if brightness > 0.7 {
+                lighting = "光线过亮，建议减少曝光"
+            }
+            
+            completion(lighting)
+        }
+        
+        let handler = VNImageRequestHandler(cgImage: cgImage)
+        try? handler.perform([request])
+    }
+    
+    // 分析色彩
+    private func analyzeColor(cgImage: CGImage, completion: @escaping (String) -> Void) {
+        // 分析图像的主要颜色
+        let image = UIImage(cgImage: cgImage)
+        let dominantColor = getDominantColor(from: image)
+        
+        var colorDescription = "色彩平衡"
+        if dominantColor.red > dominantColor.green && dominantColor.red > dominantColor.blue {
+            colorDescription = "暖色调，红色为主"
+        } else if dominantColor.blue > dominantColor.red && dominantColor.blue > dominantColor.green {
+            colorDescription = "冷色调，蓝色为主"
+        } else if dominantColor.green > dominantColor.red && dominantColor.green > dominantColor.blue {
+            colorDescription = "自然色调，绿色为主"
+        }
+        
+        completion(colorDescription)
+    }
+    
+    // 分析构图
+    private func analyzeComposition(cgImage: CGImage, completion: @escaping (String) -> Void) {
+        // 检测人脸
+        let request = VNDetectFaceRectanglesRequest { request, error in
+            guard let observations = request.results as? [VNFaceObservation] else {
+                completion("三分法构图，层次分明")
+                return
+            }
+            
+            if observations.count > 0 {
+                completion("人像构图，建议使用人像模式")
+            } else {
+                completion("三分法构图，层次分明")
+            }
+        }
+        
+        let handler = VNImageRequestHandler(cgImage: cgImage)
+        try? handler.perform([request])
+    }
+    
+    // 计算图像亮度
+    private func calculateBrightness(image: UIImage) -> CGFloat {
+        guard let cgImage = image.cgImage else { return 0.5 }
+        
+        let data = cgImage.dataProvider?.data
+        let bytes = CFDataGetBytePtr(data)
+        let length = CFDataGetLength(data)
+        
+        var totalBrightness: CGFloat = 0
+        let pixelCount = length / 4 // RGBA
+        
+        for i in 0..<pixelCount {
+            let pixelIndex = i * 4
+            let r = CGFloat(bytes?[pixelIndex] ?? 0) / 255.0
+            let g = CGFloat(bytes?[pixelIndex + 1] ?? 0) / 255.0
+            let b = CGFloat(bytes?[pixelIndex + 2] ?? 0) / 255.0
+            
+            let brightness = (r + g + b) / 3.0
+            totalBrightness += brightness
+        }
+        
+        return totalBrightness / CGFloat(pixelCount)
+    }
+    
+    // 获取主要颜色
+    private func getDominantColor(from image: UIImage) -> (red: CGFloat, green: CGFloat, blue: CGFloat) {
+        guard let cgImage = image.cgImage else { return (0.5, 0.5, 0.5) }
+        
+        let data = cgImage.dataProvider?.data
+        let bytes = CFDataGetBytePtr(data)
+        let length = CFDataGetLength(data)
+        
+        var totalRed: CGFloat = 0
+        var totalGreen: CGFloat = 0
+        var totalBlue: CGFloat = 0
+        let pixelCount = length / 4
+        
+        for i in 0..<pixelCount {
+            let pixelIndex = i * 4
+            totalRed += CGFloat(bytes?[pixelIndex] ?? 0) / 255.0
+            totalGreen += CGFloat(bytes?[pixelIndex + 1] ?? 0) / 255.0
+            totalBlue += CGFloat(bytes?[pixelIndex + 2] ?? 0) / 255.0
+        }
+        
+        return (
+            red: totalRed / CGFloat(pixelCount),
+            green: totalGreen / CGFloat(pixelCount),
+            blue: totalBlue / CGFloat(pixelCount)
+        )
     }
     
     private func getCurrentStepText() -> String {
@@ -425,6 +637,7 @@ struct AnalysisLoadingView: View {
 // MARK: - 分析结果展示界面
 struct AnalysisResultsView: View {
     let originalImage: UIImage?
+    let analysisResult: ImageAnalysisResult
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -454,11 +667,11 @@ struct AnalysisResultsView: View {
                             .font(.title2)
                             .fontWeight(.semibold)
                         
-                        AnalysisInfoRow(title: "拍摄主体", value: "风景摄影", icon: "target")
-                        AnalysisInfoRow(title: "光线条件", value: "自然光，光线充足", icon: "sun.max")
-                        AnalysisInfoRow(title: "色彩色调", value: "暖色调，色彩饱和度高", icon: "paintpalette")
-                        AnalysisInfoRow(title: "构图元素", value: "三分法构图，层次分明", icon: "camera.depth.of.field")
-                        AnalysisInfoRow(title: "分析置信度", value: "87%", icon: "checkmark.circle")
+                        AnalysisInfoRow(title: "拍摄主体", value: analysisResult.subject, icon: "target")
+                        AnalysisInfoRow(title: "光线条件", value: analysisResult.lighting, icon: "sun.max")
+                        AnalysisInfoRow(title: "色彩色调", value: analysisResult.color, icon: "paintpalette")
+                        AnalysisInfoRow(title: "构图元素", value: analysisResult.composition, icon: "camera.depth.of.field")
+                        AnalysisInfoRow(title: "分析置信度", value: analysisResult.confidence, icon: "checkmark.circle")
                     }
                     .padding()
                     .background(Color(red: 0.12, green: 0.25, blue: 0.67).opacity(0.1)) // 深蓝色背景
@@ -471,12 +684,12 @@ struct AnalysisResultsView: View {
                             .fontWeight(.semibold)
                         
                         VStack(spacing: 10) {
-                            ParameterRow(parameter: "光圈", value: "f/8.0")
-                            ParameterRow(parameter: "快门速度", value: "1/250s")
-                            ParameterRow(parameter: "ISO", value: "200")
-                            ParameterRow(parameter: "对焦模式", value: "单点对焦")
-                            ParameterRow(parameter: "测光模式", value: "矩阵测光")
-                            ParameterRow(parameter: "白平衡", value: "自动")
+                            ParameterRow(parameter: "光圈", value: analysisResult.recommendedAperture)
+                            ParameterRow(parameter: "快门速度", value: analysisResult.recommendedShutterSpeed)
+                            ParameterRow(parameter: "ISO", value: analysisResult.recommendedISO)
+                            ParameterRow(parameter: "对焦模式", value: analysisResult.recommendedFocusMode)
+                            ParameterRow(parameter: "测光模式", value: analysisResult.recommendedMeteringMode)
+                            ParameterRow(parameter: "白平衡", value: analysisResult.recommendedWhiteBalance)
                         }
                         
                         Divider()
@@ -485,7 +698,7 @@ struct AnalysisResultsView: View {
                             .font(.headline)
                             .foregroundColor(Color(red: 0.12, green: 0.25, blue: 0.67)) // 深蓝色
                         
-                        Text("根据AI分析，这是一个风景场景，建议使用小光圈获得深景深，配合较快的快门速度确保画面清晰。")
+                        Text(analysisResult.shootingAdvice)
                             .font(.body)
                             .foregroundColor(Color(red: 0.37, green: 0.45, blue: 0.63)) // 深灰蓝色
                             .multilineTextAlignment(.leading)
